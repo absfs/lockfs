@@ -9,7 +9,7 @@ on:
 jobs:
   test:
     name: Test
-    runs-on: \${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
@@ -23,7 +23,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: \${{ matrix.go }}
+          go-version: ${{ matrix.go }}
 
       - name: Download dependencies
         run: go mod download

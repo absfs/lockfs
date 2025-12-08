@@ -1,6 +1,9 @@
 # lockfs - Thread-Safe Wrapper for absfs
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/absfs/lockfs.svg)](https://pkg.go.dev/github.com/absfs/lockfs)
+[![Go Report Card](https://goreportcard.com/badge/github.com/absfs/lockfs)](https://goreportcard.com/report/github.com/absfs/lockfs)
+[![CI](https://github.com/absfs/lockfs/actions/workflows/ci.yml/badge.svg)](https://github.com/absfs/lockfs/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 The `lockfs` package provides thread-safe wrappers for `absfs` filesystem interfaces. It uses hierarchical `sync.RWMutex` locking to enable safe concurrent access from multiple goroutines while preventing races between file operations and filesystem mutations.
 
