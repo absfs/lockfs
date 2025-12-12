@@ -1,0 +1,753 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>lockfs: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">github.com/absfs/lockfs/lockfile.go (100.0%)</option>
+				
+				<option value="file1">github.com/absfs/lockfs/lockfs.go (100.0%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">not covered</span>
+				<span class="cov8">covered</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">package lockfs
+
+import (
+        "io/fs"
+        "os"
+        "sync"
+
+        "github.com/absfs/absfs"
+)
+
+// locker is an interface for types that provide filesystem-level locking.
+// File uses this to coordinate with its parent filesystem wrapper.
+type locker interface {
+        rlock()
+        runlock()
+        lock()
+        unlock()
+}
+
+// File wraps an absfs.File with hierarchical locking for thread-safe access.
+//
+// File operations acquire both:
+// 1. A read lock on the parent filesystem (prevents filesystem mutations during I/O)
+// 2. An appropriate lock on the file itself (serializes operations on this handle)
+//
+// This ensures that operations like fs.Create("/file") cannot race with
+// f.Read() on an existing handle to the same file.
+type File struct {
+        f      absfs.File
+        m      sync.RWMutex
+        parent locker
+}
+
+// wrapFile wraps an absfs.File in a thread-safe File wrapper with hierarchical locking.
+// The parent parameter provides the filesystem-level lock for coordination.
+func wrapFile(parent locker, f absfs.File, err error) (absfs.File, error) <span class="cov8" title="1">{
+        if err != nil </span><span class="cov8" title="1">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">return &amp;File{f: f, parent: parent}, nil</span>
+}
+
+// Name returns the name of the file. This is safe without locking
+// since the name is immutable after file creation.
+func (f *File) Name() string <span class="cov8" title="1">{
+        return f.f.Name()
+}</span>
+
+// Read reads up to len(p) bytes into p.
+// Uses exclusive file lock (modifies position) with filesystem read lock.
+func (f *File) Read(p []byte) (int, error) <span class="cov8" title="1">{
+        f.parent.rlock()
+        defer f.parent.runlock()
+        f.m.Lock()
+        defer f.m.Unlock()
+        return f.f.Read(p)
+}</span>
+
+// ReadAt reads len(b) bytes from the file starting at byte offset off.
+// Uses read locks on both filesystem and file (position-independent).
+func (f *File) ReadAt(b []byte, off int64) (n int, err error) <span class="cov8" title="1">{
+        f.parent.rlock()
+        defer f.parent.runlock()
+        f.m.RLock()
+        defer f.m.RUnlock()
+        return f.f.ReadAt(b, off)
+}</span>
+
+// Write writes len(p) bytes to the file.
+// Uses exclusive locks on both filesystem and file.
+func (f *File) Write(p []byte) (int, error) <span class="cov8" title="1">{
+        f.parent.rlock()
+        defer f.parent.runlock()
+        f.m.Lock()
+        defer f.m.Unlock()
+        return f.f.Write(p)
+}</span>
+
+// WriteAt writes len(b) bytes to the file starting at byte offset off.
+// Uses filesystem read lock and exclusive file lock.
+func (f *File) WriteAt(b []byte, off int64) (n int, err error) <span class="cov8" title="1">{
+        f.parent.rlock()
+        defer f.parent.runlock()
+        f.m.Lock()
+        defer f.m.Unlock()
+        return f.f.WriteAt(b, off)
+}</span>
+
+// Close closes the file.
+// Uses exclusive file lock only (closing doesn't need filesystem lock).
+func (f *File) Close() error <span class="cov8" title="1">{
+        f.m.Lock()
+        defer f.m.Unlock()
+        return f.f.Close()
+}</span>
+
+// Seek sets the offset for the next Read or Write.
+// Uses exclusive file lock (modifies position) with filesystem read lock.
+func (f *File) Seek(offset int64, whence int) (ret int64, err error) <span class="cov8" title="1">{
+        f.parent.rlock()
+        defer f.parent.runlock()
+        f.m.Lock()
+        defer f.m.Unlock()
+        return f.f.Seek(offset, whence)
+}</span>
+
+// Stat returns the FileInfo for the file.
+// Uses read locks on both filesystem and file.
+func (f *File) Stat() (os.FileInfo, error) <span class="cov8" title="1">{
+        f.parent.rlock()
+        defer f.parent.runlock()
+        f.m.RLock()
+        defer f.m.RUnlock()
+        return f.f.Stat()
+}</span>
+
+// Sync commits the file's contents to stable storage.
+// Uses filesystem read lock and exclusive file lock.
+func (f *File) Sync() error <span class="cov8" title="1">{
+        f.parent.rlock()
+        defer f.parent.runlock()
+        f.m.Lock()
+        defer f.m.Unlock()
+        return f.f.Sync()
+}</span>
+
+// Readdir reads the contents of the directory.
+// Uses exclusive file lock (modifies directory cursor) with filesystem read lock.
+func (f *File) Readdir(n int) ([]os.FileInfo, error) <span class="cov8" title="1">{
+        f.parent.rlock()
+        defer f.parent.runlock()
+        f.m.Lock()
+        defer f.m.Unlock()
+        return f.f.Readdir(n)
+}</span>
+
+// Readdirnames reads the names of directory entries.
+// Uses exclusive file lock (modifies directory cursor) with filesystem read lock.
+func (f *File) Readdirnames(n int) ([]string, error) <span class="cov8" title="1">{
+        f.parent.rlock()
+        defer f.parent.runlock()
+        f.m.Lock()
+        defer f.m.Unlock()
+        return f.f.Readdirnames(n)
+}</span>
+
+// Truncate changes the size of the file.
+// Uses filesystem read lock and exclusive file lock.
+func (f *File) Truncate(size int64) error <span class="cov8" title="1">{
+        f.parent.rlock()
+        defer f.parent.runlock()
+        f.m.Lock()
+        defer f.m.Unlock()
+        return f.f.Truncate(size)
+}</span>
+
+// WriteString writes a string to the file.
+// Uses filesystem read lock and exclusive file lock.
+func (f *File) WriteString(s string) (n int, err error) <span class="cov8" title="1">{
+        f.parent.rlock()
+        defer f.parent.runlock()
+        f.m.Lock()
+        defer f.m.Unlock()
+        return f.f.WriteString(s)
+}</span>
+
+// ReadDir reads the contents of the directory associated with file and
+// returns a slice of up to n DirEntry values, as would be returned
+// by ReadDir. If n &lt;= 0, ReadDir returns all the DirEntry values from
+// the directory in a single slice.
+// Uses exclusive file lock (modifies directory cursor) with filesystem read lock.
+func (f *File) ReadDir(n int) ([]fs.DirEntry, error) <span class="cov8" title="1">{
+        f.parent.rlock()
+        defer f.parent.runlock()
+        f.m.Lock()
+        defer f.m.Unlock()
+        return f.f.ReadDir(n)
+}</span>
+</pre>
+		
+		<pre class="file" id="file1" style="display: none">package lockfs
+
+import (
+        "io/fs"
+        "os"
+        "sync"
+        "time"
+
+        "github.com/absfs/absfs"
+)
+
+// Filer wraps an absfs.Filer with a RWMutex for thread-safe access.
+// Read operations (Stat) use RLock for concurrent access, write operations use Lock.
+// Files returned from OpenFile use hierarchical locking to coordinate with the Filer.
+type Filer struct {
+        fs absfs.Filer
+        m  sync.RWMutex
+}
+
+// locker interface implementation for hierarchical locking
+func (f *Filer) rlock()   <span class="cov8" title="1">{ f.m.RLock() }</span>
+func (f *Filer) runlock() <span class="cov8" title="1">{ f.m.RUnlock() }</span>
+func (f *Filer) lock()    <span class="cov8" title="1">{ f.m.Lock() }</span>
+func (f *Filer) unlock()  <span class="cov8" title="1">{ f.m.Unlock() }</span>
+
+// NewFiler creates a new thread-safe Filer wrapper.
+func NewFiler(filer absfs.Filer) (*Filer, error) <span class="cov8" title="1">{
+        return &amp;Filer{fs: filer}, nil
+}</span>
+
+// OpenFile opens a file using the given flags and the given mode.
+// The returned File is wrapped for thread-safe access with hierarchical locking.
+func (f *Filer) OpenFile(name string, flag int, perm os.FileMode) (absfs.File, error) <span class="cov8" title="1">{
+        f.m.Lock()
+        defer f.m.Unlock()
+        file, err := f.fs.OpenFile(name, flag, perm)
+        return wrapFile(f, file, err)
+}</span>
+
+// Mkdir creates a directory in the filesystem, return an error if any
+// happens.
+func (f *Filer) Mkdir(name string, perm os.FileMode) error <span class="cov8" title="1">{
+        f.m.Lock()
+        defer f.m.Unlock()
+        return f.fs.Mkdir(name, perm)
+}</span>
+
+// Remove removes a file identified by name, returning an error, if any
+// happens.
+func (f *Filer) Remove(name string) error <span class="cov8" title="1">{
+        f.m.Lock()
+        defer f.m.Unlock()
+        return f.fs.Remove(name)
+}</span>
+
+// Rename renames (moves) oldpath to newpath.
+func (f *Filer) Rename(oldpath, newpath string) error <span class="cov8" title="1">{
+        f.m.Lock()
+        defer f.m.Unlock()
+        return f.fs.Rename(oldpath, newpath)
+}</span>
+
+// Stat returns the FileInfo structure describing file. If there is an error,
+// it will be of type *PathError.
+func (f *Filer) Stat(name string) (os.FileInfo, error) <span class="cov8" title="1">{
+        f.m.RLock()
+        defer f.m.RUnlock()
+        return f.fs.Stat(name)
+}</span>
+
+// Chmod changes the mode of the named file to mode.
+func (f *Filer) Chmod(name string, mode os.FileMode) error <span class="cov8" title="1">{
+        f.m.Lock()
+        defer f.m.Unlock()
+        return f.fs.Chmod(name, mode)
+}</span>
+
+// Chtimes changes the access and modification times of the named file.
+func (f *Filer) Chtimes(name string, atime time.Time, mtime time.Time) error <span class="cov8" title="1">{
+        f.m.Lock()
+        defer f.m.Unlock()
+        return f.fs.Chtimes(name, atime, mtime)
+}</span>
+
+// Chown changes the owner and group ids of the named file.
+func (f *Filer) Chown(name string, uid, gid int) error <span class="cov8" title="1">{
+        f.m.Lock()
+        defer f.m.Unlock()
+        return f.fs.Chown(name, uid, gid)
+}</span>
+
+// ReadDir reads the named directory and returns all its directory entries.
+func (f *Filer) ReadDir(name string) ([]fs.DirEntry, error) <span class="cov8" title="1">{
+        f.m.RLock()
+        defer f.m.RUnlock()
+        return f.fs.ReadDir(name)
+}</span>
+
+// ReadFile reads the named file and returns its contents.
+func (f *Filer) ReadFile(name string) ([]byte, error) <span class="cov8" title="1">{
+        f.m.RLock()
+        defer f.m.RUnlock()
+        return f.fs.ReadFile(name)
+}</span>
+
+// Sub returns a filesystem corresponding to the subtree rooted at dir.
+func (f *Filer) Sub(dir string) (fs.FS, error) <span class="cov8" title="1">{
+        f.m.RLock()
+        defer f.m.RUnlock()
+        return absfs.FilerToFS(f.fs, dir)
+}</span>
+
+// FileSystem wraps an absfs.FileSystem with a RWMutex for thread-safe access.
+// Read operations use RLock for concurrent access, write operations use Lock.
+// Files returned from Open/Create/OpenFile use hierarchical locking to coordinate
+// with the FileSystem, preventing races between file operations and filesystem mutations.
+type FileSystem struct {
+        m  sync.RWMutex
+        fs absfs.FileSystem
+}
+
+// locker interface implementation for hierarchical locking
+func (f *FileSystem) rlock()   <span class="cov8" title="1">{ f.m.RLock() }</span>
+func (f *FileSystem) runlock() <span class="cov8" title="1">{ f.m.RUnlock() }</span>
+func (f *FileSystem) lock()    <span class="cov8" title="1">{ f.m.Lock() }</span>
+func (f *FileSystem) unlock()  <span class="cov8" title="1">{ f.m.Unlock() }</span>
+
+// NewFS creates a new thread-safe FileSystem wrapper.
+func NewFS(fs absfs.FileSystem) (*FileSystem, error) <span class="cov8" title="1">{
+        return &amp;FileSystem{fs: fs}, nil
+}</span>
+
+// OpenFile opens a file using the given flags and the given mode.
+// The returned File is wrapped for thread-safe access with hierarchical locking.
+func (f *FileSystem) OpenFile(name string, flag int, perm os.FileMode) (absfs.File, error) <span class="cov8" title="1">{
+        f.m.Lock()
+        defer f.m.Unlock()
+        file, err := f.fs.OpenFile(name, flag, perm)
+        return wrapFile(f, file, err)
+}</span>
+
+// Mkdir creates a directory in the filesystem, return an error if any
+// happens.
+func (f *FileSystem) Mkdir(name string, perm os.FileMode) error <span class="cov8" title="1">{
+        f.m.Lock()
+        defer f.m.Unlock()
+        return f.fs.Mkdir(name, perm)
+}</span>
+
+// Remove removes a file identified by name, returning an error, if any
+// happens.
+func (f *FileSystem) Remove(name string) error <span class="cov8" title="1">{
+        f.m.Lock()
+        defer f.m.Unlock()
+        return f.fs.Remove(name)
+}</span>
+
+// Rename renames (moves) oldpath to newpath.
+func (f *FileSystem) Rename(oldpath, newpath string) error <span class="cov8" title="1">{
+        f.m.Lock()
+        defer f.m.Unlock()
+        return f.fs.Rename(oldpath, newpath)
+}</span>
+
+// Stat returns the FileInfo structure describing file. If there is an error,
+// it will be of type *PathError.
+func (f *FileSystem) Stat(name string) (os.FileInfo, error) <span class="cov8" title="1">{
+        f.m.RLock()
+        defer f.m.RUnlock()
+        return f.fs.Stat(name)
+}</span>
+
+// Chmod changes the mode of the named file to mode.
+func (f *FileSystem) Chmod(name string, mode os.FileMode) error <span class="cov8" title="1">{
+        f.m.Lock()
+        defer f.m.Unlock()
+        return f.fs.Chmod(name, mode)
+}</span>
+
+// Chtimes changes the access and modification times of the named file.
+func (f *FileSystem) Chtimes(name string, atime time.Time, mtime time.Time) error <span class="cov8" title="1">{
+        f.m.Lock()
+        defer f.m.Unlock()
+        return f.fs.Chtimes(name, atime, mtime)
+}</span>
+
+// Chown changes the owner and group ids of the named file.
+func (f *FileSystem) Chown(name string, uid, gid int) error <span class="cov8" title="1">{
+        f.m.Lock()
+        defer f.m.Unlock()
+        return f.fs.Chown(name, uid, gid)
+}</span>
+
+// Chdir changes the current working directory.
+func (f *FileSystem) Chdir(dir string) error <span class="cov8" title="1">{
+        f.m.Lock()
+        defer f.m.Unlock()
+        return f.fs.Chdir(dir)
+}</span>
+
+// Getwd returns the current working directory.
+func (f *FileSystem) Getwd() (dir string, err error) <span class="cov8" title="1">{
+        f.m.RLock()
+        defer f.m.RUnlock()
+        return f.fs.Getwd()
+}</span>
+
+// TempDir returns the default directory for temporary files.
+func (f *FileSystem) TempDir() string <span class="cov8" title="1">{
+        return f.fs.TempDir()
+}</span>
+
+// Open opens the named file for reading.
+// The returned File is wrapped for thread-safe access with hierarchical locking.
+func (f *FileSystem) Open(name string) (absfs.File, error) <span class="cov8" title="1">{
+        f.m.RLock()
+        defer f.m.RUnlock()
+        file, err := f.fs.Open(name)
+        return wrapFile(f, file, err)
+}</span>
+
+// Create creates the named file, truncating it if it already exists.
+// The returned File is wrapped for thread-safe access with hierarchical locking.
+func (f *FileSystem) Create(name string) (absfs.File, error) <span class="cov8" title="1">{
+        f.m.Lock()
+        defer f.m.Unlock()
+        file, err := f.fs.Create(name)
+        return wrapFile(f, file, err)
+}</span>
+
+// MkdirAll creates a directory named path, along with any necessary parents.
+func (f *FileSystem) MkdirAll(name string, perm os.FileMode) error <span class="cov8" title="1">{
+        f.m.Lock()
+        defer f.m.Unlock()
+        return f.fs.MkdirAll(name, perm)
+}</span>
+
+// RemoveAll removes path and any children it contains.
+func (f *FileSystem) RemoveAll(path string) (err error) <span class="cov8" title="1">{
+        f.m.Lock()
+        defer f.m.Unlock()
+        return f.fs.RemoveAll(path)
+}</span>
+
+// Truncate changes the size of the named file.
+func (f *FileSystem) Truncate(name string, size int64) error <span class="cov8" title="1">{
+        f.m.Lock()
+        defer f.m.Unlock()
+        return f.fs.Truncate(name, size)
+}</span>
+
+// ReadDir reads the named directory and returns all its directory entries.
+func (f *FileSystem) ReadDir(name string) ([]fs.DirEntry, error) <span class="cov8" title="1">{
+        f.m.RLock()
+        defer f.m.RUnlock()
+        return f.fs.ReadDir(name)
+}</span>
+
+// ReadFile reads the named file and returns its contents.
+func (f *FileSystem) ReadFile(name string) ([]byte, error) <span class="cov8" title="1">{
+        f.m.RLock()
+        defer f.m.RUnlock()
+        return f.fs.ReadFile(name)
+}</span>
+
+// Sub returns a filesystem corresponding to the subtree rooted at dir.
+func (f *FileSystem) Sub(dir string) (fs.FS, error) <span class="cov8" title="1">{
+        f.m.RLock()
+        defer f.m.RUnlock()
+        return absfs.FilerToFS(f.fs, dir)
+}</span>
+
+// SymlinkFileSystem wraps an absfs.SymlinkFileSystem with a RWMutex for thread-safe access.
+// Read operations use RLock for concurrent access, write operations use Lock.
+// Files returned from Open/Create/OpenFile use hierarchical locking to coordinate
+// with the SymlinkFileSystem, preventing races between file operations and filesystem mutations.
+type SymlinkFileSystem struct {
+        m   sync.RWMutex
+        sfs absfs.SymlinkFileSystem
+}
+
+// locker interface implementation for hierarchical locking
+func (f *SymlinkFileSystem) rlock()   <span class="cov8" title="1">{ f.m.RLock() }</span>
+func (f *SymlinkFileSystem) runlock() <span class="cov8" title="1">{ f.m.RUnlock() }</span>
+func (f *SymlinkFileSystem) lock()    <span class="cov8" title="1">{ f.m.Lock() }</span>
+func (f *SymlinkFileSystem) unlock()  <span class="cov8" title="1">{ f.m.Unlock() }</span>
+
+// NewSymlinkFS creates a new thread-safe SymlinkFileSystem wrapper.
+func NewSymlinkFS(fs absfs.SymlinkFileSystem) (*SymlinkFileSystem, error) <span class="cov8" title="1">{
+        return &amp;SymlinkFileSystem{sfs: fs}, nil
+}</span>
+
+// OpenFile opens a file using the given flags and the given mode.
+// The returned File is wrapped for thread-safe access with hierarchical locking.
+func (f *SymlinkFileSystem) OpenFile(name string, flag int, perm os.FileMode) (absfs.File, error) <span class="cov8" title="1">{
+        f.m.Lock()
+        defer f.m.Unlock()
+        file, err := f.sfs.OpenFile(name, flag, perm)
+        return wrapFile(f, file, err)
+}</span>
+
+// Mkdir creates a directory in the filesystem, return an error if any
+// happens.
+func (f *SymlinkFileSystem) Mkdir(name string, perm os.FileMode) error <span class="cov8" title="1">{
+        f.m.Lock()
+        defer f.m.Unlock()
+        return f.sfs.Mkdir(name, perm)
+}</span>
+
+// Remove removes a file identified by name, returning an error, if any
+// happens.
+func (f *SymlinkFileSystem) Remove(name string) error <span class="cov8" title="1">{
+        f.m.Lock()
+        defer f.m.Unlock()
+        return f.sfs.Remove(name)
+}</span>
+
+// Rename renames (moves) oldpath to newpath.
+func (f *SymlinkFileSystem) Rename(oldpath, newpath string) error <span class="cov8" title="1">{
+        f.m.Lock()
+        defer f.m.Unlock()
+        return f.sfs.Rename(oldpath, newpath)
+}</span>
+
+// Stat returns the FileInfo structure describing file. If there is an error,
+// it will be of type *PathError.
+func (f *SymlinkFileSystem) Stat(name string) (os.FileInfo, error) <span class="cov8" title="1">{
+        f.m.RLock()
+        defer f.m.RUnlock()
+        return f.sfs.Stat(name)
+}</span>
+
+// Chmod changes the mode of the named file to mode.
+func (f *SymlinkFileSystem) Chmod(name string, mode os.FileMode) error <span class="cov8" title="1">{
+        f.m.Lock()
+        defer f.m.Unlock()
+        return f.sfs.Chmod(name, mode)
+}</span>
+
+// Chtimes changes the access and modification times of the named file.
+func (f *SymlinkFileSystem) Chtimes(name string, atime time.Time, mtime time.Time) error <span class="cov8" title="1">{
+        f.m.Lock()
+        defer f.m.Unlock()
+        return f.sfs.Chtimes(name, atime, mtime)
+}</span>
+
+// Chown changes the owner and group ids of the named file.
+func (f *SymlinkFileSystem) Chown(name string, uid, gid int) error <span class="cov8" title="1">{
+        f.m.Lock()
+        defer f.m.Unlock()
+        return f.sfs.Chown(name, uid, gid)
+}</span>
+
+// Chdir changes the current working directory.
+func (f *SymlinkFileSystem) Chdir(dir string) error <span class="cov8" title="1">{
+        f.m.Lock()
+        defer f.m.Unlock()
+        return f.sfs.Chdir(dir)
+}</span>
+
+// Getwd returns the current working directory.
+func (f *SymlinkFileSystem) Getwd() (dir string, err error) <span class="cov8" title="1">{
+        f.m.RLock()
+        defer f.m.RUnlock()
+        return f.sfs.Getwd()
+}</span>
+
+// TempDir returns the default directory for temporary files.
+func (f *SymlinkFileSystem) TempDir() string <span class="cov8" title="1">{
+        return f.sfs.TempDir()
+}</span>
+
+// Open opens the named file for reading.
+// The returned File is wrapped for thread-safe access with hierarchical locking.
+func (f *SymlinkFileSystem) Open(name string) (absfs.File, error) <span class="cov8" title="1">{
+        f.m.RLock()
+        defer f.m.RUnlock()
+        file, err := f.sfs.Open(name)
+        return wrapFile(f, file, err)
+}</span>
+
+// Create creates the named file, truncating it if it already exists.
+// The returned File is wrapped for thread-safe access with hierarchical locking.
+func (f *SymlinkFileSystem) Create(name string) (absfs.File, error) <span class="cov8" title="1">{
+        f.m.Lock()
+        defer f.m.Unlock()
+        file, err := f.sfs.Create(name)
+        return wrapFile(f, file, err)
+}</span>
+
+// MkdirAll creates a directory named path, along with any necessary parents.
+func (f *SymlinkFileSystem) MkdirAll(name string, perm os.FileMode) error <span class="cov8" title="1">{
+        f.m.Lock()
+        defer f.m.Unlock()
+        return f.sfs.MkdirAll(name, perm)
+}</span>
+
+// RemoveAll removes path and any children it contains.
+func (f *SymlinkFileSystem) RemoveAll(path string) (err error) <span class="cov8" title="1">{
+        f.m.Lock()
+        defer f.m.Unlock()
+        return f.sfs.RemoveAll(path)
+}</span>
+
+// Truncate changes the size of the named file.
+func (f *SymlinkFileSystem) Truncate(name string, size int64) error <span class="cov8" title="1">{
+        f.m.Lock()
+        defer f.m.Unlock()
+        return f.sfs.Truncate(name, size)
+}</span>
+
+// ReadDir reads the named directory and returns all its directory entries.
+func (f *SymlinkFileSystem) ReadDir(name string) ([]fs.DirEntry, error) <span class="cov8" title="1">{
+        f.m.RLock()
+        defer f.m.RUnlock()
+        return f.sfs.ReadDir(name)
+}</span>
+
+// ReadFile reads the named file and returns its contents.
+func (f *SymlinkFileSystem) ReadFile(name string) ([]byte, error) <span class="cov8" title="1">{
+        f.m.RLock()
+        defer f.m.RUnlock()
+        return f.sfs.ReadFile(name)
+}</span>
+
+// Sub returns a filesystem corresponding to the subtree rooted at dir.
+func (f *SymlinkFileSystem) Sub(dir string) (fs.FS, error) <span class="cov8" title="1">{
+        f.m.RLock()
+        defer f.m.RUnlock()
+        return absfs.FilerToFS(f.sfs, dir)
+}</span>
+
+// Lstat returns a FileInfo describing the named file. If the file is a
+// symbolic link, the returned FileInfo describes the symbolic link. Lstat
+// makes no attempt to follow the link. If there is an error, it will be of type *PathError.
+func (f *SymlinkFileSystem) Lstat(name string) (os.FileInfo, error) <span class="cov8" title="1">{
+        f.m.RLock()
+        defer f.m.RUnlock()
+        return f.sfs.Lstat(name)
+}</span>
+
+// Lchown changes the numeric uid and gid of the named file. If the file is a
+// symbolic link, it changes the uid and gid of the link itself. If there is
+// an error, it will be of type *PathError.
+//
+// On Windows, it always returns the syscall.EWINDOWS error, wrapped in
+// *PathError.
+func (f *SymlinkFileSystem) Lchown(name string, uid, gid int) error <span class="cov8" title="1">{
+        f.m.Lock()
+        defer f.m.Unlock()
+        return f.sfs.Lchown(name, uid, gid)
+}</span>
+
+// Readlink returns the destination of the named symbolic link. If there is an
+// error, it will be of type *PathError.
+func (f *SymlinkFileSystem) Readlink(name string) (string, error) <span class="cov8" title="1">{
+        f.m.RLock()
+        defer f.m.RUnlock()
+        return f.sfs.Readlink(name)
+}</span>
+
+// Symlink creates newname as a symbolic link to oldname. If there is an
+// error, it will be of type *LinkError.
+func (f *SymlinkFileSystem) Symlink(oldname, newname string) error <span class="cov8" title="1">{
+        f.m.Lock()
+        defer f.m.Unlock()
+        return f.sfs.Symlink(oldname, newname)
+}</span>
+</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>

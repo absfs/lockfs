@@ -1,6 +1,7 @@
 package lockfs
 
 import (
+	"io/fs"
 	"os"
 	"sync"
 	"time"
@@ -88,6 +89,27 @@ func (f *Filer) Chown(name string, uid, gid int) error {
 	return f.fs.Chown(name, uid, gid)
 }
 
+// ReadDir reads the named directory and returns all its directory entries.
+func (f *Filer) ReadDir(name string) ([]fs.DirEntry, error) {
+	f.m.RLock()
+	defer f.m.RUnlock()
+	return f.fs.ReadDir(name)
+}
+
+// ReadFile reads the named file and returns its contents.
+func (f *Filer) ReadFile(name string) ([]byte, error) {
+	f.m.RLock()
+	defer f.m.RUnlock()
+	return f.fs.ReadFile(name)
+}
+
+// Sub returns a filesystem corresponding to the subtree rooted at dir.
+func (f *Filer) Sub(dir string) (fs.FS, error) {
+	f.m.RLock()
+	defer f.m.RUnlock()
+	return absfs.FilerToFS(f.fs, dir)
+}
+
 // FileSystem wraps an absfs.FileSystem with a RWMutex for thread-safe access.
 // Read operations use RLock for concurrent access, write operations use Lock.
 // Files returned from Open/Create/OpenFile use hierarchical locking to coordinate
@@ -169,16 +191,6 @@ func (f *FileSystem) Chown(name string, uid, gid int) error {
 	return f.fs.Chown(name, uid, gid)
 }
 
-// Separator returns the path separator character.
-func (f *FileSystem) Separator() uint8 {
-	return f.fs.Separator()
-}
-
-// ListSeparator returns the path list separator character.
-func (f *FileSystem) ListSeparator() uint8 {
-	return f.fs.ListSeparator()
-}
-
 // Chdir changes the current working directory.
 func (f *FileSystem) Chdir(dir string) error {
 	f.m.Lock()
@@ -235,6 +247,27 @@ func (f *FileSystem) Truncate(name string, size int64) error {
 	f.m.Lock()
 	defer f.m.Unlock()
 	return f.fs.Truncate(name, size)
+}
+
+// ReadDir reads the named directory and returns all its directory entries.
+func (f *FileSystem) ReadDir(name string) ([]fs.DirEntry, error) {
+	f.m.RLock()
+	defer f.m.RUnlock()
+	return f.fs.ReadDir(name)
+}
+
+// ReadFile reads the named file and returns its contents.
+func (f *FileSystem) ReadFile(name string) ([]byte, error) {
+	f.m.RLock()
+	defer f.m.RUnlock()
+	return f.fs.ReadFile(name)
+}
+
+// Sub returns a filesystem corresponding to the subtree rooted at dir.
+func (f *FileSystem) Sub(dir string) (fs.FS, error) {
+	f.m.RLock()
+	defer f.m.RUnlock()
+	return absfs.FilerToFS(f.fs, dir)
 }
 
 // SymlinkFileSystem wraps an absfs.SymlinkFileSystem with a RWMutex for thread-safe access.
@@ -318,16 +351,6 @@ func (f *SymlinkFileSystem) Chown(name string, uid, gid int) error {
 	return f.sfs.Chown(name, uid, gid)
 }
 
-// Separator returns the path separator character.
-func (f *SymlinkFileSystem) Separator() uint8 {
-	return f.sfs.Separator()
-}
-
-// ListSeparator returns the path list separator character.
-func (f *SymlinkFileSystem) ListSeparator() uint8 {
-	return f.sfs.ListSeparator()
-}
-
 // Chdir changes the current working directory.
 func (f *SymlinkFileSystem) Chdir(dir string) error {
 	f.m.Lock()
@@ -384,6 +407,27 @@ func (f *SymlinkFileSystem) Truncate(name string, size int64) error {
 	f.m.Lock()
 	defer f.m.Unlock()
 	return f.sfs.Truncate(name, size)
+}
+
+// ReadDir reads the named directory and returns all its directory entries.
+func (f *SymlinkFileSystem) ReadDir(name string) ([]fs.DirEntry, error) {
+	f.m.RLock()
+	defer f.m.RUnlock()
+	return f.sfs.ReadDir(name)
+}
+
+// ReadFile reads the named file and returns its contents.
+func (f *SymlinkFileSystem) ReadFile(name string) ([]byte, error) {
+	f.m.RLock()
+	defer f.m.RUnlock()
+	return f.sfs.ReadFile(name)
+}
+
+// Sub returns a filesystem corresponding to the subtree rooted at dir.
+func (f *SymlinkFileSystem) Sub(dir string) (fs.FS, error) {
+	f.m.RLock()
+	defer f.m.RUnlock()
+	return absfs.FilerToFS(f.sfs, dir)
 }
 
 // Lstat returns a FileInfo describing the named file. If the file is a

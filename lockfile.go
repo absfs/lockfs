@@ -1,6 +1,7 @@
 package lockfs
 
 import (
+	"io/fs"
 	"os"
 	"sync"
 
@@ -161,4 +162,17 @@ func (f *File) WriteString(s string) (n int, err error) {
 	f.m.Lock()
 	defer f.m.Unlock()
 	return f.f.WriteString(s)
+}
+
+// ReadDir reads the contents of the directory associated with file and
+// returns a slice of up to n DirEntry values, as would be returned
+// by ReadDir. If n <= 0, ReadDir returns all the DirEntry values from
+// the directory in a single slice.
+// Uses exclusive file lock (modifies directory cursor) with filesystem read lock.
+func (f *File) ReadDir(n int) ([]fs.DirEntry, error) {
+	f.parent.rlock()
+	defer f.parent.runlock()
+	f.m.Lock()
+	defer f.m.Unlock()
+	return f.f.ReadDir(n)
 }
